@@ -26,8 +26,6 @@ import (
 
 	"fmt"
 
-	"time"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -50,14 +48,11 @@ var _ = SIGDescribe("NetworkPolicy", func() {
 		BeforeEach(func() {
 			By("Creating a simple server that serves on port 80 and 81.")
 			podServer, service = createServerPodAndService(f, f.Namespace, "server", []int{80, 81})
-			framework.Logf("Waiting for Server to come up.")
-			err := framework.WaitForPodRunningInNamespace(f.ClientSet, podServer)
-			Expect(err).NotTo(HaveOccurred())
 
-			// Wait for the server pods to become ready.
-			for !(podServer.Status.ContainerStatuses[0].Ready && podServer.Status.ContainerStatuses[1].Ready) {
-				time.Sleep(1 * time.Second)
-			}
+			By("Waiting for pod ready", func() {
+				err := f.WaitForPodReady(podServer.Name)
+				Expect(err).NotTo(HaveOccurred())
+			})
 
 			// Create pods, which should be able to communicate with the server on port 80 and 81.
 			By("Testing pods can connect to both ports when no policy is present.")
@@ -119,9 +114,12 @@ var _ = SIGDescribe("NetworkPolicy", func() {
 			Expect(err).NotTo(HaveOccurred())
 			defer cleanupNetworkPolicy(f, policy)
 
-			By("Creating client-a which should be able to contact the server.")
-			testCanConnect(f, f.Namespace, "client-a", service, 80)
-			testCannotConnect(f, f.Namespace, "client-b", service, 80)
+			By("Creating client-a which should be able to contact the server.", func() {
+				testCanConnect(f, f.Namespace, "client-a", service, 80)
+			})
+			By("Creating client-b which should not be able to contact the server.", func() {
+				testCannotConnect(f, f.Namespace, "client-b", service, 80)
+			})
 		})
 
 		It("should enforce policy based on NamespaceSelector [Feature:NetworkPolicy]", func() {
@@ -463,7 +461,7 @@ func cleanupServerPodAndService(f *framework.Framework, pod *v1.Pod, service *v1
 }
 
 // Create a client pod which will attempt a netcat to the provided service, on the specified port.
-// This client will attempt a oneshot connection, then die, without restarting the pod.
+// This client will attempt a one-shot connection, then die, without restarting the pod.
 // Test can then be asserted based on whether the pod quit with an error or not.
 func createNetworkClientPod(f *framework.Framework, namespace *v1.Namespace, podName string, targetService *v1.Service, targetPort int) *v1.Pod {
 	pod, err := f.ClientSet.Core().Pods(namespace.Name).Create(&v1.Pod{
@@ -491,6 +489,7 @@ func createNetworkClientPod(f *framework.Framework, namespace *v1.Namespace, pod
 	})
 
 	Expect(err).NotTo(HaveOccurred())
+
 	return pod
 }
 
